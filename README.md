@@ -1,2 +1,3 @@
 # ExogateInitiative-MelonMod
-MelonLoader mod for game Exogate Initiative
+
+MelonLoader (https://github.com/LavaGang/MelonLoader) mod for game Exogate Initiative
