@@ -10,7 +10,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using static MelonLoader.MelonLogger;
 
-[assembly: MelonInfo(typeof(JModder.ExoGater.Core), "ExoCheatMod", "1.1.0", "jw11-modder", null)]
+[assembly: MelonInfo(typeof(JModder.ExoGater.Core), "ExoCheatMod", "1.2.0", "jw11-modder", null)]
 [assembly: MelonGame("XenoBits", "ExogateInitiative")]
 
 namespace JModder.ExoGater
@@ -25,7 +25,6 @@ namespace JModder.ExoGater
         private static MelonPreferences_Category MinAttrCategory;
 
         private static MelonPreferences_Entry<KeyCode> configMenuToggle;
-        private static Key configMenuToggleKey;
 
         private static MelonPreferences_Entry<bool> configGaterMinAttr;
         private static MelonPreferences_Entry<bool> configNoGaterBodyNeeds;
@@ -33,6 +32,8 @@ namespace JModder.ExoGater
         private static MelonPreferences_Entry<bool> configNoPowerCost;
         private static MelonPreferences_Entry<bool> configNoObjectsCost;
         private static MelonPreferences_Entry<bool> configNoCraftCost;
+        private static MelonPreferences_Entry<bool> configAlwaysPassSkill;
+        private static MelonPreferences_Entry<bool> configInstantProcessing;
 
         private static MelonPreferences_Entry<float> configCraftSpeedMultiplier;
         private static MelonPreferences_Entry<float> configResearchSpeedMultiplier;
@@ -41,8 +42,8 @@ namespace JModder.ExoGater
         private static MelonPreferences_Entry<float> configMoneyMultiplier;
         private static MelonPreferences_Entry<float> configResearchPointsMultiplier;
         private static MelonPreferences_Entry<float> configWeaponDamageMultiplier;
-
-        private static MelonPreferences_Entry<int> configGaterXPMultiplier;
+        private static MelonPreferences_Entry<float> configCompoundMultiplier;
+        private static MelonPreferences_Entry<float> configGaterXPMultiplier;
 
         private static MelonPreferences_Entry<int> configAttrBodyMin;
         private static MelonPreferences_Entry<int> configAttrMindMin;
@@ -50,6 +51,8 @@ namespace JModder.ExoGater
         private static MelonPreferences_Entry<int> configAttrSocialMin;
         private static MelonPreferences_Entry<int> configAttrKnowledgeMin;
         private static MelonPreferences_Entry<int> configAttrLogicMin;
+
+        // configGaterMinAttr
 
         [HarmonyPatch(typeof(GatersManager), "Update")]
         class GatersManagerUpdatePatch1
@@ -97,6 +100,8 @@ namespace JModder.ExoGater
             }
         }
 
+        // configGaterXPMultiplier
+
         [HarmonyPatch(typeof(ActorGater), "GainXp")]
         class GaterGainXpPatch1
         {
@@ -104,10 +109,12 @@ namespace JModder.ExoGater
             {
                 if (configGaterXPMultiplier.Value <= 1)
                     return true;
-                p_amount *= configGaterXPMultiplier.Value;
+                p_amount = Mathf.RoundToInt(p_amount * configGaterXPMultiplier.Value);
                 return true;
             }
         }
+
+        // configNoGaterBodyNeeds
 
         [HarmonyPatch(typeof(ActorGater), "UpdateBodyFatigue")]
         class UpdateBodyFatiguePatch1
@@ -123,6 +130,25 @@ namespace JModder.ExoGater
                 return false;
             }
         }
+
+        // ActorGater Hurt
+        [HarmonyPatch(typeof(ActorGater), nameof(ActorGater.Hurt))]
+        class GaterHurtPatch1
+        {
+            static bool Prefix(ActorGater __instance, ref float __result)
+            {
+                if (!configNoGaterBodyNeeds.Value)
+                    return true;
+                __instance.Data.BodyFatigue = 0;
+                __instance.Data.BodyNeeds = 0;
+                __instance.Data.Health = __instance.Data.MaxHealth;
+                __result = 0;
+                return false;
+            }
+        }
+
+
+        // configNoGaterMentalNeeds
 
         [HarmonyPatch(typeof(ActorGater), "UpdateEntertainementNeeds")]
         class UpdateEntertainementNeedsPatch1
@@ -140,6 +166,8 @@ namespace JModder.ExoGater
             }
         }
 
+        //configCraftSpeedMultiplier
+
         [HarmonyPatch(typeof(CraftTask), nameof(CraftTask.MakeCraftProgress))]
         class MakeCraftProgressPatch1
         {
@@ -152,6 +180,8 @@ namespace JModder.ExoGater
             }
         }
 
+        // configResearchPointsMultiplier
+
         [HarmonyPatch(typeof(ScienceManager), nameof(ScienceManager.EarnAlienSciencePoints))]
         class EarnAlienSciencePointsPatch1
         {
@@ -163,6 +193,7 @@ namespace JModder.ExoGater
                 return true;
             }
         }
+
         [HarmonyPatch(typeof(ScienceManager), nameof(ScienceManager.EarnSciencePoints))]
         class EarnSciencePointsPointsPatch1
         {
@@ -174,6 +205,8 @@ namespace JModder.ExoGater
                 return true;
             }
         }
+
+        // configResearchSpeedMultiplier
 
         [HarmonyPatch(typeof(ScienceManager), nameof(ScienceManager.MakeResearchProgress))]
         class MakeResearchProgressPatch1
@@ -187,6 +220,8 @@ namespace JModder.ExoGater
             }
         }
 
+        // configInfluenceMultiplier
+
         [HarmonyPatch(typeof(InfluenceManager), nameof(InfluenceManager.EarnInfluence))]
         class EarnInfluencePatch1
         {
@@ -199,7 +234,10 @@ namespace JModder.ExoGater
             }
         }
 
+        // configWeaponDamageMultiplier
+
         [HarmonyPatch(typeof(ItemWeapon), nameof(ItemWeapon.GetDamage))]
+        [HarmonyPatch(typeof(NOR_Turret), "GetProjectileDamage")]
         class GetDamagePatch1
         {
             static void Postfix(ref float __result)
@@ -209,6 +247,22 @@ namespace JModder.ExoGater
                 __result *= configWeaponDamageMultiplier.Value;
             }
         }
+
+        // baseTeamFightGeneratedContact GetHumanGaterDamages
+        [HarmonyPatch(typeof(baseTeamFightGeneratedContact), "GetHumanGaterDamages")]
+        class GetHumanGaterDamagesPatch1
+        {
+            static void Postfix(ref int __result)
+            {
+                if (configWeaponDamageMultiplier.Value <= 1)
+                    return;
+                __result = Mathf.RoundToInt(__result * configWeaponDamageMultiplier.Value);
+            }
+        }
+
+
+
+        // configNoObjectsCost
 
         [HarmonyPatch(typeof(PlaceableObject), nameof(PlaceableObject.Install))]
         class PlaceableObjectInstallPatch1
@@ -222,6 +276,8 @@ namespace JModder.ExoGater
             }
 
         }
+
+        // configBuildSpeedMultiplier
 
         [HarmonyPatch(typeof(BuildersManager), "Start")]
         class BuildersManagerStartPatch1
@@ -261,6 +317,8 @@ namespace JModder.ExoGater
 
         }
 
+        // configMoneyMultiplier
+
         [HarmonyPatch(typeof(BudgetManager), nameof(BudgetManager.Earn))]
         class BudgetManagerEarnPatch1
         {
@@ -268,11 +326,27 @@ namespace JModder.ExoGater
             {
                 if (configMoneyMultiplier.Value <= 1)
                     return true;
-                p_amount = (int)(p_amount * configMoneyMultiplier.Value);
+                p_amount = Mathf.RoundToInt(p_amount * configMoneyMultiplier.Value);
                 return true;
             }
 
         }
+
+        // configCompoundMultiplier
+        [HarmonyPatch(typeof(RO_CompoundStorage), nameof(RO_CompoundStorage.Capacity), MethodType.Getter)]
+        class CompoundStoragePatch1
+        {
+            static void Postfix(ref float __result)
+            {
+                if (configCompoundMultiplier.Value <= 1)
+                    return;
+                __result *= configCompoundMultiplier.Value;
+            }
+
+        }
+
+
+        // configNoPowerCost
 
         [HarmonyPatch(typeof(PowerManager), nameof(PowerManager.UpdateAvailablePower))]
         class UpdateAvailablePowerPatch1
@@ -315,6 +389,22 @@ namespace JModder.ExoGater
             }
         }
 
+        // configAlwaysPassSkill
+
+        [HarmonyPatch(typeof(SkillCheckManager), "GetChanceToPassSkillCheck")]
+        class SkillCheckPatch1
+        {
+            static void Postfix(ref float __result)
+            {
+                if (!configAlwaysPassSkill.Value)
+                    return;
+                __result = 1f;
+            }
+        }
+
+
+        // configNoCraftCost
+
         [HarmonyPatch(typeof(WorkshopManager), nameof(WorkshopManager.CreateNewCraftTask))]
         class CreateNewCraftTaskPatch1
         {
@@ -335,6 +425,21 @@ namespace JModder.ExoGater
 
         }
 
+        // configInstantProcessing
+        [HarmonyPatch(typeof(RO_RAWProcessor), "ProcessingDuration", MethodType.Getter)]
+        class UpdateProcessingPatch1
+        {
+            static void Postfix(ref float __result, ref RO_RAWProcessor __instance)
+            {
+                if (!configInstantProcessing.Value)
+                    return;
+                __result = 0;
+
+            }
+
+        }
+
+
         public override void OnInitializeMelon()
         {
 
@@ -349,11 +454,13 @@ namespace JModder.ExoGater
             
 
             configGaterMinAttr = ToggleCategory.CreateEntry<bool>("configSetGaterMinAttr", true, "Set minimal attributes for Gaters");
-            configNoGaterBodyNeeds = ToggleCategory.CreateEntry<bool>("configNoGaterBodyNeeds", true, "Disable all physical needs for Gaters");
+            configNoGaterBodyNeeds = ToggleCategory.CreateEntry<bool>("configNoGaterBodyNeeds", true, "Disable all physical needs or injuries for Gaters");
             configNoGaterMentalNeeds = ToggleCategory.CreateEntry<bool>("configNoGaterMentalNeeds", true, "Disable all mental needs for Gaters");
             configNoPowerCost = ToggleCategory.CreateEntry<bool>("configNoPowerCost", true, "Disable power consumption and set max power");
             configNoObjectsCost = ToggleCategory.CreateEntry<bool>("configNoObjectsCost", true, "Disable cost for placeable objects");
             configNoCraftCost = ToggleCategory.CreateEntry<bool>("configNoCraftCost", true, "Disable cost for workshop crafting");
+            configAlwaysPassSkill = ToggleCategory.CreateEntry<bool>("configAlwaysPassSkill", true, "Always pass gater skill check");
+            configInstantProcessing = ToggleCategory.CreateEntry<bool>("configInstantProcessing", true, "Enable instant processing of minerals");
 
             configCraftSpeedMultiplier = MultiplierFloatCategory.CreateEntry<float>("configCraftSpeedMultiplier", 2f, "Multiplier for craft speed", validator: new ValueRange<float>(1f, 20f));
             configResearchSpeedMultiplier = MultiplierFloatCategory.CreateEntry<float>("configResearchSpeedMultiplier", 2f, "Multiplier for research speed", validator: new ValueRange<float>(1f, 20f));
@@ -362,8 +469,8 @@ namespace JModder.ExoGater
             configInfluenceMultiplier = MultiplierFloatCategory.CreateEntry<float>("configInfluenceMultiplier", 2f, "Multiplier for all influence income", validator: new ValueRange<float>(1f, 20f));
             configMoneyMultiplier = MultiplierFloatCategory.CreateEntry<float>("configMoneyMultiplier", 2f, "Multiplier for all money income", validator: new ValueRange<float>(1f, 20f));
             configWeaponDamageMultiplier = MultiplierFloatCategory.CreateEntry<float>("configWeaponDamageMultiplier", 2f, "Multiplier for Gater weapon damage", validator: new ValueRange<float>(1f, 20f));
-
-            configGaterXPMultiplier = MultiplierIntCategory.CreateEntry<int>("configGaterXPMultiplier", 2, "Multiplier for Gater XP gain", validator: new ValueRange<int>(1, 20));
+            configCompoundMultiplier = MultiplierFloatCategory.CreateEntry<float>("configCompoundMultiplier", 2f, "Multiplier for compound storage capacity", validator: new ValueRange<float>(1f, 10f));
+            configGaterXPMultiplier = MultiplierFloatCategory.CreateEntry<float>("configGaterXPMultiplier", 2f, "Multiplier for Gater XP gain", validator: new ValueRange<float>(1, 20));
             
 
             configAttrBodyMin = MinAttrCategory.CreateEntry<int>("configAttrBodyMin", 2, "Minimal Body Attribute for Gaters", null, false, false, validator: new ValueRange<int>(1, 10));
@@ -377,17 +484,18 @@ namespace JModder.ExoGater
 
             JMod.Init(Instance);
             configMenuToggle = JMod.configMenuToggle;
-            configMenuToggleKey = JMod.KeycodeToKey(configMenuToggle.Value);
             JMod.Log("ExoCheat Mod Initialized.");
         }
 
         public override void OnUpdate()
         {
-            if (Keyboard.current[configMenuToggleKey].wasReleasedThisFrame)
-            {
-                JMod.SwitchMenu();
-            }
+            if (Event.current != null)
+                if (Event.current.keyCode == configMenuToggle.Value && Event.current.type == EventType.KeyDown)
+                    JMod.SwitchMenu(false);
 
+            if (Event.current != null)
+                if (Event.current.keyCode == KeyCode.Escape && Event.current.type == EventType.KeyDown)
+                    JMod.SwitchMenu(true);
         }
 
         public override void OnGUI()
